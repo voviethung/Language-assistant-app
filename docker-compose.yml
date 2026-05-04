@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
     environment:
       ARGOS_SHARED_KEY: ${ARGOS_SHARED_KEY:-}
-      ARGOS_LANG_PAIRS: ${ARGOS_LANG_PAIRS:-en-vi,vi-en}
+      ARGOS_LANG_PAIRS: ${ARGOS_LANG_PAIRS:-en-vi,vi-en,en-zh,zh-en,en-ja,ja-en,en-ko,ko-en,en-fr,fr-en,en-de,de-en,en-es,es-en}
     volumes:
       - argos-cache:/root/.local/share/argos-translate
     ports:
