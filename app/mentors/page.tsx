@@ -1,0 +1,244 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useAuth } from '@/components/AuthProvider';
+import { useToast } from '@/components/Toast';
+import { ROLE_COLORS } from '@/lib/roles';
+import type { Profile } from '@/lib/types';
+
+interface MentorWithStudents extends Profile {
+  studentCount: number;
+  students: Pick<Profile, 'id' | 'full_name' | 'email' | 'department'>[];
+}
+
+export default function MentorsPage() {
+  const { user, role, loading } = useAuth();
+  const { showToast } = useToast();
+
+  const [mentors, setMentors] = useState<MentorWithStudents[]>([]);
+  const [allUsers, setAllUsers] = useState<Profile[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showPromote, setShowPromote] = useState(false);
+  const [promoteUserId, setPromoteUserId] = useState('');
+  const [search, setSearch] = useState('');
+
+  // AUTH TEMPORARILY DISABLED — no redirect for guests
+  // useEffect(() => {
+  //   if (!loading && (!user || role !== 'admin')) {
+  //     router.push('/');
+  //   }
+  // }, [user, role, loading, router]);
+
+  const fetchData = async () => {
+    try {
+      const response = await fetch('/api/admin/mentors', { cache: 'no-store' });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Failed to load mentors');
+      }
+
+      setMentors((payload.data?.mentors as MentorWithStudents[]) || []);
+      setAllUsers((payload.data?.allStudents as Profile[]) || []);
+    } catch (err) {
+      console.error('[mentors] fetchData error:', err);
+      showToast(err instanceof Error ? err.message : 'Failed to load mentors', 'error');
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user && (role === 'admin' || role === 'mentor')) {
+      setLoadingData(true);
+      fetchData();
+      return;
+    }
+
+    setMentors([]);
+    setAllUsers([]);
+    setLoadingData(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, role]);
+
+  const handlePromote = async () => {
+    if (!promoteUserId) {
+      showToast('Select a user to promote', 'error');
+      return;
+    }
+    const response = await fetch('/api/admin/mentors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: promoteUserId }),
+    });
+    const payload = await response.json();
+
+    if (!response.ok || !payload.success) {
+      showToast(payload.error || 'Failed to promote mentor', 'error');
+      return;
+    }
+    showToast('User promoted to Mentor', 'success');
+    setShowPromote(false);
+    setPromoteUserId('');
+    fetchData();
+  };
+
+  const handleDemote = async (mentorId: string) => {
+    if (!confirm('Demote this mentor back to student?')) return;
+    const response = await fetch(`/api/admin/mentors?mentorId=${mentorId}`, {
+      method: 'DELETE',
+    });
+    const payload = await response.json();
+
+    if (!response.ok || !payload.success) {
+      showToast(payload.error || 'Failed to demote mentor', 'error');
+      return;
+    }
+    showToast('Mentor demoted to Student', 'success');
+    fetchData();
+  };
+
+  const filtered = mentors.filter(
+    (m) =>
+      !search ||
+      m.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      m.email?.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  if (loading) {
+    return <div className="flex min-h-[100dvh] items-center justify-center"><div className="text-primary-600">Loading...</div></div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center px-4 text-center">
+        <span className="mb-3 text-5xl">🔒</span>
+        <h2 className="text-lg font-semibold text-slate-600">Login Required</h2>
+        <p className="mt-1 text-sm text-slate-400">Please log in to manage mentors.</p>
+        <a href="/login" className="mt-4 rounded-lg bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:from-primary-600 hover:to-primary-700">Go to Login</a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-[100dvh] pb-20 pt-4 animate-fade-in">
+      <div className="mx-auto max-w-lg px-4">
+        {/* Header */}
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">👨‍🏫 Mentors</h1>
+            <p className="text-sm text-slate-500">{mentors.length} mentors</p>
+          </div>
+          <button
+            onClick={() => setShowPromote(!showPromote)}
+            className="rounded-lg bg-primary-500 px-3 py-2 text-xs font-medium text-white hover:bg-primary-600"
+            disabled={role !== 'admin'}
+          >
+            + Promote
+          </button>
+        </div>
+
+        {/* Promote Form */}
+        {showPromote && role === 'admin' && (
+          <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 animate-scale-in">
+            <h3 className="mb-2 text-sm font-semibold text-slate-700">Promote Student to Mentor</h3>
+            <select
+              value={promoteUserId}
+              onChange={(e) => setPromoteUserId(e.target.value)}
+              className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none"
+            >
+              <option value="">— Select a student —</option>
+              {allUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.full_name || u.email || u.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button onClick={handlePromote} className="flex-1 rounded-lg bg-blue-500 py-2 text-sm font-medium text-white hover:bg-blue-600">
+                Confirm
+              </button>
+              <button onClick={() => setShowPromote(false)} className="flex-1 rounded-lg bg-slate-200 py-2 text-sm font-medium text-slate-600">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Search */}
+        <input
+          type="text"
+          placeholder="Search mentors..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="mb-4 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20"
+        />
+
+        {/* Mentor List */}
+        {loadingData ? (
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-slate-100" />)}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-xl bg-white p-8 text-center text-sm text-slate-400 shadow-sm">
+            No mentors found
+          </div>
+        ) : (
+          <div className="space-y-3 stagger-children">
+            {filtered.map((mentor) => (
+              <div key={mentor.id} className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+                <div
+                  className="flex items-start justify-between p-4 cursor-pointer"
+                  onClick={() => setExpandedId(expandedId === mentor.id ? null : mentor.id)}
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-800">{mentor.full_name || 'Unnamed'}</span>
+                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${ROLE_COLORS.mentor}`}>
+                        Mentor
+                      </span>
+                    </div>
+                    {mentor.email && <p className="mt-0.5 text-xs text-slate-400">{mentor.email}</p>}
+                    <p className="mt-1 text-xs text-slate-500">
+                      🎓 {mentor.studentCount} student{mentor.studentCount !== 1 ? 's' : ''} assigned
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDemote(mentor.id); }}
+                      className="rounded-lg px-2 py-1 text-xs text-red-500 hover:bg-red-50"
+                      disabled={role !== 'admin'}
+                    >
+                      Demote
+                    </button>
+                    <span className="text-slate-300">{expandedId === mentor.id ? '▲' : '▼'}</span>
+                  </div>
+                </div>
+
+                {/* Expanded students */}
+                {expandedId === mentor.id && (
+                  <div className="border-t border-slate-100 bg-slate-50 p-4 animate-fade-in">
+                    <p className="mb-2 text-xs font-semibold text-slate-500">Assigned Students:</p>
+                    {mentor.students.length === 0 ? (
+                      <p className="text-xs text-slate-400">No students assigned yet</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {mentor.students.map((s) => (
+                          <div key={s.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs">
+                            <span>🎓</span>
+                            <span className="font-medium text-slate-700">{s.full_name || 'Unnamed'}</span>
+                            {s.department && <span className="text-slate-400">({s.department})</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
