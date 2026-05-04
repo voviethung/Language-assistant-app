@@ -5,9 +5,11 @@
  *   2. Fallback to Groq Whisper API when tunnel is down
  */
 
-const STT_URL = process.env.STT_URL ?? 'https://internship.pharmacountry.com';
-const STT_KEY = process.env.STT_KEY ?? '';
-const GROQ_API_KEY = process.env.GROQ_API_KEY ?? '';
+import Config from 'react-native-config';
+
+const STT_URL = Config.STT_URL ?? 'https://internship.pharmacountry.com';
+const STT_KEY = Config.STT_KEY ?? '';
+const GROQ_API_KEY = Config.GROQ_API_KEY ?? '';
 
 export interface STTResult {
   text: string;
